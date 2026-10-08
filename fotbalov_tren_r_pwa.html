@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="cs" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fotbalový Trenér - PWA Aplikace</title>
+    <meta name="theme-color" content="#16a34a">
+    <meta name="description" content="Aplikace pro tvorbu fotbalových tréninků, správu cvičení a zápasů s pokročilou taktickou tabulí">
+    
+    <!-- PWA Manifest Inline Data URI -->
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Fotbalový Trenér","short_name":"FTrenér","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#16a34a","icons":[{"src":"https://img.icons8.com/color/192/football-court.png","sizes":"192x192","type":"image/png"}]}'>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pitch: {
+                            DEFAULT: '#15803d',
+                            dark: '#166534',
+                            lines: 'rgba(255, 255, 255, 0.85)'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        canvas {
+            touch-action: none;
+        }
+        .tool-active {
+            box-shadow: 0 0 0 2px #10b981;
+            background-color: #334155 !important;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased bg-slate-900 text-slate-100 overflow-x-hidden">
+
+    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/80 sticky top-0 z-30 px-4 py-3 flex items-center justify-between shadow-md">
+        <div class="flex items-center space-x-2">
+            <div class="bg-emerald-600 text-white p-2 rounded-xl shadow-lg shadow-emerald-900/50">
+                <i class="fa-solid fa-futbol text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight text-white">Fotbalový Trenér</h1>
+                <p class="text-xs text-slate-400">Taktika & Plánování</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-2">
+            <button id="pwaInstallBtn" onclick="installPWA()" class="hidden bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs px-3 py-2 rounded-lg font-semibold transition flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-download"></i>
+                <span>Instalovat</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto pb-20 max-w-4xl w-full mx-auto p-4">
+        
+        <!-- Navigation Tabs -->
+        <div class="grid grid-cols-3 gap-1.5 p-1 bg-slate-800/80 rounded-xl mb-5 border border-slate-700/50 text-xs sm:text-sm">
+            <button id="tabTrainingBtn" onclick="switchTab('training')" class="py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow">
+                <i class="fa-solid fa-stopwatch"></i>
+                <span>Tréninky</span>
+            </button>
+            <button id="tabLibraryBtn" onclick="switchTab('library')" class="py-2.5 rounded-lg font-bold text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-book-open"></i>
+                <span>Knihovna</span>
+            </button>
+            <button id="tabMatchBtn" onclick="switchTab('match')" class="py-2.5 rounded-lg font-bold text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-trophy"></i>
+                <span>Zápas</span>
+            </button>
+        </div>
+
+        <section id="sectionTraining" class="space-y-4">
+            <div class="flex border-b border-slate-700">
+                <button id="subTabCreateBtn" onclick="switchSubTab('create')" class="pb-2 px-4 text-sm font-semibold text-emerald-400 border-b-2 border-emerald-500">
+                    <i class="fa-solid fa-plus-circle mr-1.5"></i> Vytvořit trénink
+                </button>
+                <button id="subTabLoadBtn" onclick="switchSubTab('load')" class="pb-2 px-4 text-sm font-semibold text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-folder-open mr-1.5"></i> Načíst trénink (<span id="savedTrainingsCount">0</span>)
+                </button>
+            </div>
+
+            <!-- SUB-TAB 1: VYTVOŘIT TRÉNINK -->
+            <div id="subTabCreate" class="space-y-5">
+                <div class="bg-slate-800/70 border border-slate-700/80 rounded-2xl p-4 space-y-4 shadow-sm">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-emerald-400">Základní údaje tréninku</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Zaměření / Název tréninku</label>
+                            <input type="text" id="trainingTitle" placeholder="např. Přechodová fáze a střelba" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Datum</label>
+                            <input type="date" id="trainingDate" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Plánovaná délka (min)</label>
+                            <input type="number" id="trainingTargetDuration" value="90" min="10" max="240" oninput="updateDurationSummary()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Bar -->
+                <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs text-slate-400 block">Celkový čas cvičení</span>
+                        <span class="text-lg font-bold text-white"><span id="currentTotalDuration">0</span> / <span id="targetDurationDisplay">90</span> min</span>
+                    </div>
+                    <div class="w-1/2 bg-slate-700 h-3 rounded-full overflow-hidden">
+                        <div id="durationProgressBar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-sm text-slate-200">Cvičení v tomto tréninku</h3>
+                        <button onclick="openAddExercisePicker()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 shadow">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Načíst cvičení z knihovny</span>
+                        </button>
+                    </div>
+
+                    <div id="trainingExercisesContainer" class="space-y-2">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <button onclick="saveFullTraining()" class="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-floppy-disk text-lg"></i>
+                    <span>Uložit kompletní trénink</span>
+                </button>
+            </div>
+
+            <!-- SUB-TAB 2: NAČÍST TRÉNINK -->
+            <div id="subTabLoad" class="hidden space-y-4">
+                <div id="savedTrainingsList" class="space-y-3">
+                    <!-- Dynamic List of Saved Trainings -->
+                </div>
+            </div>
+        </section>
+
+        <section id="sectionLibrary" class="hidden space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-bold text-white">Knihovna Cvičení</h2>
+                    <p class="text-xs text-slate-400">Samostatná databáze cvičení podle kategorií</p>
+                </div>
+                <button onclick="openExerciseModal(null, null)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Vytvořit nové cvičení</span>
+                </button>
+            </div>
+
+            <div id="libraryContainer" class="space-y-4">
+                <!-- Rendered dynamically -->
+            </div>
+        </section>
+
+        <section id="sectionMatch" class="hidden space-y-4">
+            <div class="bg-slate-800/70 border border-slate-700/80 rounded-2xl p-4 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-emerald-400" id="matchFormTitle">Příprava na zápas & Sestava</h2>
+                    <button id="cancelMatchEditBtn" onclick="cancelMatchEdit()" class="hidden text-xs text-slate-400 hover:text-white bg-slate-700/60 px-2.5 py-1 rounded-lg">
+                        <i class="fa-solid fa-xmark mr-1"></i> Zrušit úpravy
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Soupeř</label>
+                        <input type="text" id="matchOpponent" placeholder="FK Slovan..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Datum & Čas</label>
+                        <input type="datetime-local" id="matchDate" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Soupiska / Nominace</label>
+                        <textarea id="matchRoster" rows="4" placeholder="1. Novák (GK)&#10;2. Svoboda&#10;3. Dvořák..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Taktické pokyny & Poznámky</label>
+                        <textarea id="matchNotes" rows="4" placeholder="Vysoký presink, rychlé křídelní akce..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"></textarea>
+                    </div>
+                </div>
+
+                <button id="saveMatchBtn" onclick="saveMatchInfo()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i> <span id="saveMatchBtnText">Uložit Zápas</span>
+                </button>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="font-bold text-sm text-slate-200">Uložené zápasy</h3>
+                <div id="savedMatchesContainer" class="space-y-2">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="exerciseModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex flex-col">
+        <div class="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <select id="modalCategorySelect" class="bg-emerald-900/80 text-emerald-300 font-bold px-2.5 py-1 rounded-md border border-emerald-700/50 text-xs outline-none">
+                    <option value="Rozcvička">Rozcvička</option>
+                    <option value="Přihrávky">Přihrávky</option>
+                    <option value="Střelba">Střelba</option>
+                    <option value="Herní cvičení">Herní cvičení</option>
+                    <option value="Hra">Hra</option>
+                </select>
+                <h3 class="font-bold text-white text-base">Editor Cvičení</h3>
+            </div>
+            <button onclick="closeExerciseModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-3 space-y-4 max-w-4xl w-full mx-auto">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Název cvičení</label>
+                    <input type="text" id="exName" placeholder="Přihrávkový trojúhelník..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Doporučený čas (min)</label>
+                    <input type="number" id="exDuration" value="15" min="1" max="120" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-xs font-medium text-slate-300">Taktická tabule (Klikněte nebo táhněte na hřišti)</label>
+                
+                <div class="bg-slate-800 border border-slate-700 p-2 rounded-xl flex flex-wrap gap-1.5 items-center justify-between text-xs">
+                    <!-- Line Tools -->
+                    <div class="flex flex-wrap gap-1">
+                        <button onclick="setTool('line_pass')" id="tool_line_pass" class="tool-btn bg-slate-700 px-2 py-1.5 rounded-lg flex items-center gap-1 hover:bg-slate-600">
+                            <i class="fa-solid fa-ellipsis"></i> Přihrávka
+                        </button>
+                        <button onclick="setTool('line_run')" id="tool_line_run" class="tool-btn bg-slate-700 px-2 py-1.5 rounded-lg flex items-center gap-1 hover:bg-slate-600">
+                            <i class="fa-solid fa-arrow-right"></i> Běh
+                        </button>
+                        <button onclick="setTool('line_dribble')" id="tool_line_dribble" class="tool-btn bg-slate-700 px-2 py-1.5 rounded-lg flex items-center gap-1 hover:bg-slate-600">
+                            <i class="fa-solid fa-wave-square"></i> Driblink
+                        </button>
+                    </div>
+
+                    <!-- Stamp Tools & Color Options -->
+                    <div class="flex flex-wrap gap-1.5 items-center border-l border-slate-700 pl-2">
+                        <!-- Player Stamp & Color Picker -->
+                        <div class="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-1 gap-1">
+                            <button onclick="setTool('stamp', 'player')" id="tool_player" class="tool-btn px-2 py-1 rounded-md flex items-center gap-1 hover:bg-slate-800 text-xs font-semibold">
+                                👤 Hráč
+                            </button>
+                            <div class="flex items-center gap-1 pl-1 border-l border-slate-700">
+                                <button onclick="setPlayerColor('#ffffff')" class="color-swatch w-5 h-5 rounded-full border border-slate-400 bg-white transition hover:scale-110" title="Bílá"></button>
+                                <button onclick="setPlayerColor('#18181b')" class="color-swatch w-5 h-5 rounded-full border border-slate-600 bg-zinc-900 transition hover:scale-110" title="Černá"></button>
+                                <button onclick="setPlayerColor('#ef4444')" class="color-swatch w-5 h-5 rounded-full border border-slate-600 bg-red-500 transition hover:scale-110" title="Červená"></button>
+                                <button onclick="setPlayerColor('#22c55e')" class="color-swatch w-5 h-5 rounded-full border border-slate-600 bg-emerald-500 transition hover:scale-110" title="Zelená"></button>
+                                <button onclick="setPlayerColor('#3b82f6')" class="color-swatch w-5 h-5 rounded-full border border-slate-600 bg-blue-500 transition hover:scale-110" title="Modrá"></button>
+                                <button onclick="setPlayerColor('#eab308')" class="color-swatch w-5 h-5 rounded-full border border-slate-600 bg-yellow-500 transition hover:scale-110" title="Žlutá"></button>
+                                <button onclick="setPlayerColor('#ec4899')" class="color-swatch w-5 h-5 rounded-full border border-slate-600 bg-pink-500 transition hover:scale-110" title="Růžová"></button>
+                                <input type="color" id="playerColorPicker" value="#ef4444" onchange="setPlayerColor(this.value)" class="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Vlastní barva">
+                            </div>
+                        </div>
+
+                        <!-- Portable Goal & Rotation -->
+                        <div class="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5">
+                            <button onclick="setTool('stamp', 'goal')" id="tool_goal" class="tool-btn px-2 py-1 rounded-md flex items-center gap-1 hover:bg-slate-800">
+                                🥅 Branka
+                            </button>
+                            <select id="goalAngleSelect" class="bg-slate-800 text-xs text-white rounded px-1 py-0.5 ml-1 border border-slate-700 outline-none" title="Natočení branky">
+                                <option value="0">0° (Vpravo)</option>
+                                <option value="90">90° (Dolů)</option>
+                                <option value="180">180° (Vlevo)</option>
+                                <option value="270">270° (Nahoru)</option>
+                            </select>
+                        </div>
+
+                        <button onclick="setTool('stamp', 'ball')" id="tool_ball" class="tool-btn bg-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-600">
+                            ⚽ Míč
+                        </button>
+                        <button onclick="setTool('stamp', 'cone')" id="tool_cone" class="tool-btn bg-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-600">
+                            🟧 Kužel
+                        </button>
+                    </div>
+
+                    <!-- Eraser & Clear -->
+                    <div class="flex gap-1 border-l border-slate-700 pl-2">
+                        <button onclick="setTool('eraser')" id="tool_eraser" class="tool-btn bg-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-600 text-amber-300">
+                            <i class="fa-solid fa-eraser"></i> Mazat
+                        </button>
+                        <button onclick="clearCanvas()" class="bg-red-900/60 hover:bg-red-800 text-red-200 px-2 py-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-trash"></i> Vše
+                        </button>
+                    </div>
+                </div>
+
+                <div id="canvasWrapper" class="relative w-full aspect-[4/3] sm:aspect-[16/9] bg-emerald-800 rounded-xl overflow-hidden border-2 border-slate-700 shadow-inner">
+                    <canvas id="tacticalCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Poznámky k cvičení & Pravidla</label>
+                <textarea id="exNotes" rows="3" placeholder="Popis cvičení, dávkování, klíčové body..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"></textarea>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 border-t border-slate-800 p-3 flex gap-2">
+            <button onclick="closeExerciseModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2.5 rounded-xl text-slate-300 font-semibold text-sm transition">
+                Zrušit
+            </button>
+            <button onclick="saveLibraryExercise()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-white font-bold text-sm transition shadow-lg">
+                <i class="fa-solid fa-check mr-1"></i> Uložit do Knihovny
+            </button>
+        </div>
+    </div>
+
+    <div id="pickerModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex flex-col">
+        <div class="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between">
+            <h3 class="font-bold text-white text-base">Vybrat cvičení z knihovny</h3>
+            <button onclick="closeExercisePicker()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-3 space-y-4 max-w-2xl w-full mx-auto" id="pickerContainer">
+            <!-- Dynamic Render -->
+        </div>
+    </div>
+
+    <!-- Match Detail Modal -->
+    <div id="matchDetailModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex flex-col">
+        <div class="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between">
+            <h3 class="font-bold text-emerald-400 text-base" id="matchDetailTitle">Detail Zápasu</h3>
+            <button onclick="closeMatchDetailModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl w-full mx-auto">
+            <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-700/80 pb-3">
+                    <div>
+                        <span class="text-xs text-slate-400">Soupeř</span>
+                        <h2 class="text-xl font-bold text-white" id="matchDetailOpponent">-</h2>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-400">Datum & Čas</span>
+                        <p class="text-sm font-semibold text-emerald-400" id="matchDetailDate">-</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5"><i class="fa-solid fa-users mr-1"></i> Soupiska / Nominace</h4>
+                    <div id="matchDetailRoster" class="bg-slate-900 rounded-xl p-3 text-sm text-slate-200 whitespace-pre-line border border-slate-800"></div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5"><i class="fa-solid fa-clipboard-list mr-1"></i> Taktické pokyny & Poznámky</h4>
+                    <div id="matchDetailNotes" class="bg-slate-900 rounded-xl p-3 text-sm text-slate-200 whitespace-pre-line border border-slate-800"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 border-t border-slate-800 p-3 flex gap-2 max-w-2xl w-full mx-auto">
+            <button id="editMatchBtn" onclick="" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-white font-bold text-sm transition shadow-lg flex items-center justify-center gap-2">
+                <i class="fa-solid fa-pen-to-square"></i> Upravit v editoru
+            </button>
+            <button id="deleteMatchModalBtn" onclick="" class="bg-red-900/60 hover:bg-red-800 text-red-200 px-4 py-2.5 rounded-xl font-semibold text-sm transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-trash"></i> Smazat
+            </button>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="customConfirmModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div class="flex items-center gap-3 text-amber-400">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <h3 id="confirmModalTitle" class="font-bold text-white text-base">Potvrzení akce</h3>
+            </div>
+            <p id="confirmModalMsg" class="text-xs text-slate-300 leading-relaxed"></p>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button onclick="closeConfirmModal(false)" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold text-slate-300 transition">
+                    Zrušit
+                </button>
+                <button onclick="closeConfirmModal(true)" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-xs font-bold text-white transition shadow-lg">
+                    Ano, potvrdit
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
+
+    <script>
+        const CATEGORIES = ['Rozcvička', 'Přihrávky', 'Střelba', 'Herní cvičení', 'Hra'];
+        
+        let currentTraining = {
+            id: null,
+            title: '',
+            date: new Date().toISOString().split('T')[0],
+            targetDuration: 90,
+            exercises: []
+        };
+
+        let editingLibraryExerciseId = null;
+        let editingMatchId = null;
+        let activePlayerColor = '#ef4444';
+
+        // Canvas state
+        let canvas, ctx;
+        let activeTool = 'line_pass';
+        let activeStampType = 'player';
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let currentCanvasObjects = [];
+
+        window.onload = function() {
+            initApp();
+            initCanvas();
+            renderLibrary();
+            renderTrainingExercises();
+            updateSavedTrainingsCount();
+            loadMatchesList();
+            document.getElementById('trainingDate').value = currentTraining.date;
+            setTool('line_pass');
+        };
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const bgColor = type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white';
+            const icon = type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-check';
+            toast.className = `${bgColor} p-3 rounded-xl shadow-xl flex items-center gap-2 text-xs font-bold transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-base"></i><span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        let confirmCallback = null;
+        function showConfirm(title, message, onConfirm) {
+            document.getElementById('confirmModalTitle').innerText = title;
+            document.getElementById('confirmModalMsg').innerText = message;
+            confirmCallback = onConfirm;
+            document.getElementById('customConfirmModal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal(confirmed) {
+            document.getElementById('customConfirmModal').classList.add('hidden');
+            if (confirmed && typeof confirmCallback === 'function') {
+                confirmCallback();
+            }
+            confirmCallback = null;
+        }
+
+        function setPlayerColor(color) {
+            activePlayerColor = color;
+            document.getElementById('playerColorPicker').value = color;
+            setTool('stamp', 'player');
+        }
+
+        function initApp() {
+            if ('serviceWorker' in navigator) {
+                const swCode = `
+                    self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+                    self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+                    self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => new Response("Offline mode"))));
+                `;
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(err => console.log('SW error:', err));
+            }
+        }
+
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const btn = document.getElementById('pwaInstallBtn');
+            if (btn) btn.classList.remove('hidden');
+        });
+
+        function installPWA() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    document.getElementById('pwaInstallBtn').classList.add('hidden');
+                }
+                deferredPrompt = null;
+            });
+        }
+
+        function switchTab(tab) {
+            const trainSec = document.getElementById('sectionTraining');
+            const libSec = document.getElementById('sectionLibrary');
+            const matchSec = document.getElementById('sectionMatch');
+            
+            const trainBtn = document.getElementById('tabTrainingBtn');
+            const libBtn = document.getElementById('tabLibraryBtn');
+            const matchBtn = document.getElementById('tabMatchBtn');
+
+            [trainSec, libSec, matchSec].forEach(s => s.classList.add('hidden'));
+            [trainBtn, libBtn, matchBtn].forEach(b => b.className = "py-2.5 rounded-lg font-bold text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5");
+
+            if (tab === 'training') {
+                trainSec.classList.remove('hidden');
+                trainBtn.className = "py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow";
+            } else if (tab === 'library') {
+                libSec.classList.remove('hidden');
+                libBtn.className = "py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow";
+                renderLibrary();
+            } else {
+                matchSec.classList.remove('hidden');
+                matchBtn.className = "py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow";
+            }
+        }
+
+        function switchSubTab(subTab) {
+            const createDiv = document.getElementById('subTabCreate');
+            const loadDiv = document.getElementById('subTabLoad');
+            const createBtn = document.getElementById('subTabCreateBtn');
+            const loadBtn = document.getElementById('subTabLoadBtn');
+
+            if (subTab === 'create') {
+                createDiv.classList.remove('hidden');
+                loadDiv.classList.add('hidden');
+                createBtn.className = "pb-2 px-4 text-sm font-semibold text-emerald-400 border-b-2 border-emerald-500";
+                loadBtn.className = "pb-2 px-4 text-sm font-semibold text-slate-400 hover:text-white";
+            } else {
+                createDiv.classList.add('hidden');
+                loadDiv.classList.remove('hidden');
+                loadBtn.className = "pb-2 px-4 text-sm font-semibold text-emerald-400 border-b-2 border-emerald-500";
+                createBtn.className = "pb-2 px-4 text-sm font-semibold text-slate-400 hover:text-white";
+                renderSavedTrainingsList();
+            }
+        }
+
+        function getLibraryExercises() {
+            return JSON.parse(localStorage.getItem('ft_library') || '[]');
+        }
+
+        function saveLibraryExercise() {
+            const name = document.getElementById('exName').value.trim();
+            const duration = document.getElementById('exDuration').value;
+            const notes = document.getElementById('exNotes').value;
+            const category = document.getElementById('modalCategorySelect').value;
+
+            if (!name) {
+                showToast('Prosím zadejte název cvičení.', 'error');
+                return;
+            }
+
+            const canvasData = canvas.toDataURL('image/png');
+
+            const exerciseItem = {
+                id: editingLibraryExerciseId || 'lib_' + Date.now(),
+                category: category,
+                name: name,
+                duration: parseInt(duration) || 15,
+                notes: notes,
+                canvasData: canvasData,
+                objects: currentCanvasObjects
+            };
+
+            let library = getLibraryExercises();
+            if (editingLibraryExerciseId) {
+                const idx = library.findIndex(e => e.id === editingLibraryExerciseId);
+                if (idx !== -1) library[idx] = exerciseItem;
+            } else {
+                library.push(exerciseItem);
+            }
+
+            localStorage.setItem('ft_library', JSON.stringify(library));
+            closeExerciseModal();
+            renderLibrary();
+            showToast('Cvičení bylo uložen do knihovny!');
+        }
+        function deleteLibraryExercise(e, id) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            showConfirm('Smazat cvičení', 'Opravdu chcete smazat toto cvičení z knihovny?', () => {
+                let library = getLibraryExercises().filter(ex => ex.id !== id);
+                localStorage.setItem('ft_library', JSON.stringify(library));
+                renderLibrary();
+                showToast('Cvičení smazáno z knihovny.');
+            });
+        }
+
+        function renderLibrary() {
+            const container = document.getElementById('libraryContainer');
+            const library = getLibraryExercises();
+            container.innerHTML = '';
+
+            CATEGORIES.forEach(cat => {
+                const catItems = library.filter(e => e.category === cat);
+
+                const catEl = document.createElement('div');
+                catEl.className = "bg-slate-800/80 border border-slate-700/70 rounded-xl p-3 space-y-2";
+                
+                let listHtml = '';
+                if (catItems.length === 0) {
+                    listHtml = `<p class="text-xs text-slate-500 italic py-1">Žádná uložená cvičení v této kategorii</p>`;
+                } else {
+                    listHtml = catItems.map(ex => `
+                        <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-2.5 flex items-center justify-between">
+                            <div class="flex items-center space-x-3 overflow-hidden cursor-pointer" onclick="openExerciseModal('${cat}', '${ex.id}')">
+                                <div class="w-12 h-10 bg-emerald-900/50 rounded overflow-hidden border border-emerald-700/50 flex-shrink-0">
+                                    <img src="${ex.canvasData || ''}" class="w-full h-full object-cover">
+                                </div>
+                                <div class="truncate">
+                                    <h4 class="font-bold text-xs text-white truncate">${escapeHtml(ex.name)}</h4>
+                                    <span class="text-[10px] text-slate-400"><i class="fa-regular fa-clock mr-1"></i>${ex.duration} min</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button onclick="event.stopPropagation(); openExerciseModal('${cat}', '${ex.id}')" class="text-slate-400 hover:text-emerald-400 p-2 text-xs" title="Upravit">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button onclick="deleteLibraryExercise(event, '${ex.id}')" class="text-slate-400 hover:text-red-400 p-2 text-xs" title="Smazat">
+                                    <i class="fa-solid fa-trash text-red-400"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                catEl.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-sm text-emerald-400">${cat} (${catItems.length})</span>
+                        <button onclick="openExerciseModal('${cat}')" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs px-2.5 py-1 rounded-lg border border-emerald-500/30 font-semibold transition flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> Nové
+                        </button>
+                    </div>
+                    <div class="space-y-1.5 pt-1">${listHtml}</div>
+                `;
+                container.appendChild(catEl);
+            });
+        }
+
+        function openAddExercisePicker() {
+            const library = getLibraryExercises();
+            const container = document.getElementById('pickerContainer');
+
+            if (library.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400">
+                        <p class="text-sm mb-2">V knihovně ještě nemáte žádná cvičení.</p>
+                        <button onclick="closeExercisePicker(); switchTab('library');" class="text-emerald-400 font-bold text-xs underline">
+                            Přejít do knihovny a vytvořit cvičení
+                        </button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = library.map(ex => `
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <img src="${ex.canvasData || ''}" class="w-12 h-10 object-cover rounded border border-slate-600">
+                            <div>
+                                <span class="text-[10px] bg-emerald-900/80 text-emerald-300 px-1.5 py-0.5 rounded font-bold">${ex.category}</span>
+                                <h4 class="font-bold text-xs text-white mt-0.5">${escapeHtml(ex.name)}</h4>
+                                <span class="text-[10px] text-slate-400">${ex.duration} min</span>
+                            </div>
+                        </div>
+                        <button onclick="addExerciseToTraining('${ex.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold">
+                            Přidat
+                        </button>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('pickerModal').classList.remove('hidden');
+        }
+
+        function closeExercisePicker() {
+            document.getElementById('pickerModal').classList.add('hidden');
+        }
+
+        function addExerciseToTraining(libraryId) {
+            const library = getLibraryExercises();
+            const ex = library.find(item => item.id === libraryId);
+            if (!ex) return;
+
+            currentTraining.exercises.push({
+                instanceId: 'inst_' + Date.now(),
+                libraryId: ex.id,
+                name: ex.name,
+                category: ex.category,
+                duration: ex.duration,
+                notes: ex.notes,
+                canvasData: ex.canvasData
+            });
+
+            closeExercisePicker();
+            renderTrainingExercises();
+            updateDurationSummary();
+            showToast('Cvičení přidáno do tréninku');
+        }
+        function removeExerciseFromTraining(e, instanceId) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            currentTraining.exercises = currentTraining.exercises.filter(ex => ex.instanceId !== instanceId);
+            renderTrainingExercises();
+            updateDurationSummary();
+            showToast('Cvičení odebráno');
+        }
+
+        function renderTrainingExercises() {
+            const container = document.getElementById('trainingExercisesContainer');
+            if (currentTraining.exercises.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 italic py-2">Žádné cvičení v tréninku. Klikněte na "Načíst cvičení z knihovny".</p>`;
+                return;
+            }
+
+            container.innerHTML = currentTraining.exercises.map((ex, idx) => `
+                <div class="bg-slate-800/90 border border-slate-700/80 rounded-xl p-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <span class="text-xs font-bold text-slate-500 w-4">${idx + 1}.</span>
+                        <img src="${ex.canvasData || ''}" class="w-12 h-10 object-cover rounded border border-slate-600">
+                        <div>
+                            <span class="text-[10px] text-emerald-400 font-bold">${ex.category}</span>
+                            <h4 class="font-bold text-xs text-white">${escapeHtml(ex.name)}</h4>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" value="${ex.duration}" min="1" onchange="updateExerciseDuration('${ex.instanceId}', this.value)" class="w-14 bg-slate-900 border border-slate-700 text-xs text-white rounded p-1 text-center">
+                        <span class="text-xs text-slate-400">min</span>
+                        <button onclick="removeExerciseFromTraining(event, '${ex.instanceId}')" class="text-slate-400 hover:text-red-400 p-2 text-xs ml-1" title="Odebrat">
+                            <i class="fa-solid fa-trash text-red-400"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            updateDurationSummary();
+        }
+
+        function updateExerciseDuration(instanceId, newDuration) {
+            const ex = currentTraining.exercises.find(e => e.instanceId === instanceId);
+            if (ex) {
+                ex.duration = parseInt(newDuration) || 0;
+                updateDurationSummary();
+            }
+        }
+
+        function updateDurationSummary() {
+            const total = currentTraining.exercises.reduce((sum, e) => sum + parseInt(e.duration || 0), 0);
+            const target = parseInt(document.getElementById('trainingTargetDuration').value) || 90;
+            
+            document.getElementById('currentTotalDuration').innerText = total;
+            document.getElementById('targetDurationDisplay').innerText = target;
+
+            const percentage = Math.min(100, Math.round((total / target) * 100));
+            const progressBar = document.getElementById('durationProgressBar');
+            progressBar.style.width = percentage + '%';
+            progressBar.className = percentage > 100 ? "bg-amber-500 h-full transition-all duration-300" : "bg-emerald-500 h-full transition-all duration-300";
+        }
+
+        function openExerciseModal(category = 'Rozcvička', libraryId = null) {
+            editingLibraryExerciseId = libraryId;
+
+            if (category) document.getElementById('modalCategorySelect').value = category;
+
+            if (libraryId) {
+                const library = getLibraryExercises();
+                const ex = library.find(e => e.id === libraryId);
+                if (ex) {
+                    document.getElementById('exName').value = ex.name;
+                    document.getElementById('exDuration').value = ex.duration;
+                    document.getElementById('exNotes').value = ex.notes || '';
+                    document.getElementById('modalCategorySelect').value = ex.category;
+                    if (ex.objects) currentCanvasObjects = JSON.parse(JSON.stringify(ex.objects));
+                }
+            } else {
+                document.getElementById('exName').value = '';
+                document.getElementById('exDuration').value = 15;
+                document.getElementById('exNotes').value = '';
+                currentCanvasObjects = [];
+            }
+
+            document.getElementById('exerciseModal').classList.remove('hidden');
+            resizeCanvas();
+            redrawCanvas();
+        }
+
+        function closeExerciseModal() {
+            document.getElementById('exerciseModal').classList.add('hidden');
+        }
+
+        function initCanvas() {
+            canvas = document.getElementById('tacticalCanvas');
+            ctx = canvas.getContext('2d');
+
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+
+            canvas.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                canvas.dispatchEvent(new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY }));
+            }, { passive: false });
+
+            canvas.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                canvas.dispatchEvent(new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }));
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', () => canvas.dispatchEvent(new MouseEvent("mouseup", {})));
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        function resizeCanvas() {
+            if (!canvas) return;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            redrawCanvas();
+        }
+
+        function setTool(tool, stampType = null) {
+            activeTool = tool;
+            if (stampType) activeStampType = stampType;
+
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('ring-2', 'ring-emerald-400', 'bg-slate-600'));
+            const btnId = stampType ? `tool_${stampType}` : `tool_${tool}`;
+            const activeBtn = document.getElementById(btnId);
+            if (activeBtn) activeBtn.classList.add('ring-2', 'ring-emerald-400', 'bg-slate-600');
+        }
+
+        function startDrawing(e) {
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+
+            if (activeTool === 'eraser') {
+                deleteObjectAt(startX, startY);
+                return;
+            }
+
+            isDrawing = true;
+
+            if (activeTool === 'stamp') {
+                const color = activePlayerColor || document.getElementById('playerColorPicker').value;
+                const angle = parseInt(document.getElementById('goalAngleSelect').value) || 0;
+                
+                currentCanvasObjects.push({
+                    type: 'stamp',
+                    stampType: activeStampType,
+                    x: startX,
+                    y: startY,
+                    color: color,
+                    angle: angle
+                });
+                redrawCanvas();
+                isDrawing = false;
+            }
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+
+            redrawCanvas();
+
+            // Preview active line tool
+            ctx.save();
+            if (activeTool === 'line_pass') {
+                ctx.setLineDash([6, 6]);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+                drawArrowhead(ctx, startX, startY, currentX, currentY);
+            } else if (activeTool === 'line_run') {
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+                drawArrowhead(ctx, startX, startY, currentX, currentY);
+            } else if (activeTool === 'line_dribble') {
+                drawWavyLine(ctx, startX, startY, currentX, currentY, '#facc15');
+                drawArrowhead(ctx, startX, startY, currentX, currentY, '#facc15');
+            }
+            ctx.restore();
+        }
+
+        function stopDrawing(e) {
+            if (!isDrawing) return;
+            isDrawing = false;
+            const rect = canvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+
+            if (Math.hypot(endX - startX, endY - startY) > 10) {
+                currentCanvasObjects.push({
+                    type: activeTool,
+                    x1: startX, y1: startY,
+                    x2: endX, y2: endY
+                });
+            }
+            redrawCanvas();
+        }
+
+        function deleteObjectAt(x, y) {
+            const threshold = 18;
+            currentCanvasObjects = currentCanvasObjects.filter(obj => {
+                if (obj.type === 'stamp') {
+                    return Math.hypot(obj.x - x, obj.y - y) > threshold;
+                } else {
+                    return pointToSegmentDistance({x, y}, {x: obj.x1, y: obj.y1}, {x: obj.x2, y: obj.y2}) > threshold;
+                }
+            });
+            redrawCanvas();
+        }
+
+        function pointToSegmentDistance(p, a, b) {
+            const l2 = Math.hypot(a.x - b.x, a.y - b.y) ** 2;
+            if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+            let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)));
+        }
+
+        function clearCanvas() {
+            showConfirm('Vymazat hřiště', 'Opravdu chcete vymazat celou taktickou tabuli?', () => {
+                currentCanvasObjects = [];
+                redrawCanvas();
+                showToast('Taktická tabule byla vymazána.');
+            });
+        }
+
+        function redrawCanvas() {
+            if (!ctx) return;
+            ctx.fillStyle = '#15803d';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Pitch Lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 2;
+
+            // Outer pitch
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+            // Center Line & Circle
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 10);
+            ctx.lineTo(canvas.width / 2, canvas.height - 10);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, Math.min(canvas.width, canvas.height) * 0.15, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Penalty Boxes
+            const boxHeight = canvas.height * 0.5;
+            const boxWidth = canvas.width * 0.16;
+            ctx.strokeRect(10, (canvas.height - boxHeight) / 2, boxWidth, boxHeight);
+            ctx.strokeRect(canvas.width - 10 - boxWidth, (canvas.height - boxHeight) / 2, boxWidth, boxHeight);
+
+            // Fixed Main Pitch Goals
+            const mainGoalH = canvas.height * 0.22;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(2, (canvas.height - mainGoalH) / 2, 8, mainGoalH);
+            ctx.strokeRect(2, (canvas.height - mainGoalH) / 2, 8, mainGoalH);
+
+            ctx.fillRect(canvas.width - 10, (canvas.height - mainGoalH) / 2, 8, mainGoalH);
+            ctx.strokeRect(canvas.width - 10, (canvas.height - mainGoalH) / 2, 8, mainGoalH);
+
+            // Render Objects
+            currentCanvasObjects.forEach(obj => {
+                if (obj.type === 'line_pass') {
+                    ctx.save();
+                    ctx.setLineDash([6, 6]);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(obj.x1, obj.y1);
+                    ctx.lineTo(obj.x2, obj.y2);
+                    ctx.stroke();
+                    ctx.restore();
+                    drawArrowhead(ctx, obj.x1, obj.y1, obj.x2, obj.y2);
+                } else if (obj.type === 'line_run') {
+                    ctx.save();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(obj.x1, obj.y1);
+                    ctx.lineTo(obj.x2, obj.y2);
+                    ctx.stroke();
+                    ctx.restore();
+                    drawArrowhead(ctx, obj.x1, obj.y1, obj.x2, obj.y2);
+                } else if (obj.type === 'line_dribble') {
+                    drawWavyLine(ctx, obj.x1, obj.y1, obj.x2, obj.y2, '#facc15');
+                    drawArrowhead(ctx, obj.x1, obj.y1, obj.x2, obj.y2, '#facc15');
+                } else if (obj.type === 'stamp') {
+                    drawStamp(ctx, obj);
+                }
+            });
+        }
+
+        function drawArrowhead(context, fromx, fromy, tox, toy, color = '#ffffff') {
+            const headlen = 10;
+            const angle = Math.atan2(toy - fromy, tox - fromx);
+            context.save();
+            context.fillStyle = color;
+            context.beginPath();
+            context.moveTo(tox, toy);
+            context.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+            context.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+            context.closePath();
+            context.fill();
+            context.restore();
+        }
+
+        function drawWavyLine(context, x1, y1, x2, y2, color) {
+            context.save();
+            context.strokeStyle = color;
+            context.lineWidth = 3;
+            context.beginPath();
+
+            const dist = Math.hypot(x2 - x1, y2 - y1);
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const wavelength = 12;
+            const amplitude = 4;
+            const steps = Math.floor(dist / wavelength) * 2;
+
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const px = x1 + (x2 - x1) * t;
+                const py = y1 + (y2 - y1) * t;
+                const perpAngle = angle + Math.PI / 2;
+                const offset = (i % 2 === 0 ? 1 : -1) * amplitude;
+
+                if (i === 0) {
+                    context.moveTo(px, py);
+                } else {
+                    context.lineTo(px + Math.cos(perpAngle) * offset, py + Math.sin(perpAngle) * offset);
+                }
+            }
+            context.stroke();
+            context.restore();
+        }
+
+        function drawStamp(context, obj) {
+            context.save();
+            context.translate(obj.x, obj.y);
+
+            if (obj.stampType === 'player') {
+                context.fillStyle = obj.color || '#ef4444';
+                context.beginPath();
+                context.arc(0, 0, 10, 0, Math.PI * 2);
+                context.fill();
+                context.strokeStyle = '#ffffff';
+                context.lineWidth = 2;
+                context.stroke();
+            } else if (obj.stampType === 'goal') {
+                context.rotate((obj.angle || 0) * Math.PI / 180);
+                context.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                context.fillRect(-10, -15, 20, 30);
+                context.strokeStyle = '#ffffff';
+                context.lineWidth = 2.5;
+                context.strokeRect(-10, -15, 20, 30);
+            } else if (obj.stampType === 'ball') {
+                context.fillStyle = '#ffffff';
+                context.beginPath();
+                context.arc(0, 0, 6, 0, Math.PI * 2);
+                context.fill();
+                context.strokeStyle = '#000000';
+                context.lineWidth = 1.5;
+                context.stroke();
+            } else if (obj.stampType === 'cone') {
+                context.fillStyle = '#f97316';
+                context.beginPath();
+                context.moveTo(0, -8);
+                context.lineTo(7, 7);
+                context.lineTo(-7, 7);
+                context.closePath();
+                context.fill();
+            }
+            context.restore();
+        }
+
+        function saveFullTraining() {
+            const title = document.getElementById('trainingTitle').value.trim();
+            const date = document.getElementById('trainingDate').value;
+            const targetDuration = parseInt(document.getElementById('trainingTargetDuration').value) || 90;
+
+            if (!title) {
+                showToast('Prosím zadejte zaměření nebo název tréninku.', 'error');
+                return;
+            }
+
+            if (currentTraining.exercises.length === 0) {
+                showToast('Přidejte do tréninku alespoň jedno cvičení.', 'error');
+                return;
+            }
+
+            const trainingData = {
+                id: currentTraining.id || 'train_' + Date.now(),
+                title: title,
+                date: date,
+                targetDuration: targetDuration,
+                exercises: currentTraining.exercises
+            };
+
+            let savedTrainings = JSON.parse(localStorage.getItem('ft_trainings') || '[]');
+            if (currentTraining.id) {
+                const idx = savedTrainings.findIndex(t => t.id === currentTraining.id);
+                if (idx !== -1) savedTrainings[idx] = trainingData;
+            } else {
+                savedTrainings.push(trainingData);
+            }
+
+            localStorage.setItem('ft_trainings', JSON.stringify(savedTrainings));
+            showToast('Trénink byl úspěšně uložen!');
+
+            // Reset current training
+            currentTraining = {
+                id: null,
+                title: '',
+                date: new Date().toISOString().split('T')[0],
+                targetDuration: 90,
+                exercises: []
+            };
+            document.getElementById('trainingTitle').value = '';
+            renderTrainingExercises();
+            updateSavedTrainingsCount();
+            switchSubTab('load');
+        }
+
+        function updateSavedTrainingsCount() {
+            const savedTrainings = JSON.parse(localStorage.getItem('ft_trainings') || '[]');
+            document.getElementById('savedTrainingsCount').innerText = savedTrainings.length;
+        }
+
+        function renderSavedTrainingsList() {
+            const container = document.getElementById('savedTrainingsList');
+            const savedTrainings = JSON.parse(localStorage.getItem('ft_trainings') || '[]');
+
+            if (savedTrainings.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 italic py-4 text-center">Nemáte žádné uložené tréninky.</p>`;
+                return;
+            }
+
+            container.innerHTML = savedTrainings.map(tr => {
+                const totalMins = tr.exercises.reduce((s, e) => s + parseInt(e.duration || 0), 0);
+                return `
+                    <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-bold text-sm text-white">${escapeHtml(tr.title)}</h4>
+                                <span class="text-[10px] bg-emerald-900/80 text-emerald-300 font-bold px-2 py-0.5 rounded">${tr.date}</span>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-1">${tr.exercises.length} cvičení | Celkem ${totalMins} min</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="loadTrainingIntoEditor('${tr.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold">
+                                Načíst
+                            </button>
+                            <button onclick="deleteSavedTraining(event, '${tr.id}')" class="text-slate-400 hover:text-red-400 p-2 text-xs" title="Smazat">
+                                <i class="fa-solid fa-trash text-red-400"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function loadTrainingIntoEditor(trainingId) {
+            const savedTrainings = JSON.parse(localStorage.getItem('ft_trainings') || '[]');
+            const tr = savedTrainings.find(t => t.id === trainingId);
+            if (!tr) return;
+
+            currentTraining = JSON.parse(JSON.stringify(tr));
+            document.getElementById('trainingTitle').value = currentTraining.title || '';
+            document.getElementById('trainingDate').value = currentTraining.date || new Date().toISOString().split('T')[0];
+            document.getElementById('trainingTargetDuration').value = currentTraining.targetDuration || 90;
+
+            renderTrainingExercises();
+            updateDurationSummary();
+            switchSubTab('create');
+            showToast('Trénink byl načten do editoru.');
+        }
+
+        function deleteSavedTraining(e, trainingId) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            showConfirm('Smazat trénink', 'Opravdu chcete smazat tento trénink?', () => {
+                let savedTrainings = JSON.parse(localStorage.getItem('ft_trainings') || '[]').filter(t => t.id !== trainingId);
+                localStorage.setItem('ft_trainings', JSON.stringify(savedTrainings));
+                renderSavedTrainingsList();
+                updateSavedTrainingsCount();
+                showToast('Trénink byl smazán.');
+            });
+        }
+
+        function saveMatchInfo() {
+            const opponent = document.getElementById('matchOpponent').value.trim();
+            const date = document.getElementById('matchDate').value;
+            const roster = document.getElementById('matchRoster').value;
+            const notes = document.getElementById('matchNotes').value;
+
+            if (!opponent) {
+                showToast('Zadejte prosím soupeře.', 'error');
+                return;
+            }
+
+            let matches = JSON.parse(localStorage.getItem('ft_matches') || '[]');
+
+            if (editingMatchId) {
+                const idx = matches.findIndex(m => m.id === editingMatchId);
+                if (idx !== -1) {
+                    matches[idx] = { id: editingMatchId, opponent, date, roster, notes };
+                }
+                showToast('Zápas byl úspěšně aktualizován!');
+            } else {
+                const matchItem = {
+                    id: 'match_' + Date.now(),
+                    opponent: opponent,
+                    date: date,
+                    roster: roster,
+                    notes: notes
+                };
+                matches.push(matchItem);
+                showToast('Zápas byl úspěšně uložen!');
+            }
+
+            localStorage.setItem('ft_matches', JSON.stringify(matches));
+            cancelMatchEdit();
+            loadMatchesList();
+        }
+
+        function cancelMatchEdit() {
+            editingMatchId = null;
+            document.getElementById('matchOpponent').value = '';
+            document.getElementById('matchDate').value = '';
+            document.getElementById('matchRoster').value = '';
+            document.getElementById('matchNotes').value = '';
+            document.getElementById('matchFormTitle').innerText = 'Příprava na zápas & Sestava';
+            document.getElementById('saveMatchBtnText').innerText = 'Uložit Zápas';
+            document.getElementById('cancelMatchEditBtn').classList.add('hidden');
+        }
+
+        function loadMatchesList() {
+            const container = document.getElementById('savedMatchesContainer');
+            const matches = JSON.parse(localStorage.getItem('ft_matches') || '[]');
+
+            if (matches.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 italic py-2">Žádné uložené zápasy.</p>`;
+                return;
+            }
+
+            container.innerHTML = matches.map(m => `
+                <div class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-xl p-3 space-y-1 transition cursor-pointer" onclick="openMatchDetailModal('${m.id}')">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-trophy text-amber-400 text-xs"></i>
+                            <h4 class="font-bold text-sm text-emerald-400">vs ${escapeHtml(m.opponent)}</h4>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="deleteSavedMatch(event, '${m.id}')" class="text-slate-400 hover:text-red-400 p-2 text-xs" title="Smazat">
+                                <i class="fa-solid fa-trash text-red-400"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-300"><i class="fa-regular fa-calendar-days mr-1 text-slate-400"></i>${m.date ? m.date.replace('T', ' ') : 'Nespecifikováno'}</p>
+                    ${m.notes ? `<p class="text-xs text-slate-400 italic truncate">Pokyny: ${escapeHtml(m.notes)}</p>` : ''}
+                    <p class="text-[10px] text-emerald-400 pt-1 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-expand text-[10px]"></i> <span>Klikněte pro rozkliknutí detailu & nominace</span>
+                    </p>
+                </div>
+            `).join('');
+        }
+
+        function openMatchDetailModal(matchId) {
+            const matches = JSON.parse(localStorage.getItem('ft_matches') || '[]');
+            const m = matches.find(item => item.id === matchId);
+            if (!m) return;
+
+            document.getElementById('matchDetailOpponent').innerText = `vs ${m.opponent}`;
+            document.getElementById('matchDetailDate').innerText = m.date ? m.date.replace('T', ' ') : 'Nespecifikováno';
+            document.getElementById('matchDetailRoster').innerText = m.roster ? m.roster : 'Žádná nominace neuvedena.';
+            document.getElementById('matchDetailNotes').innerText = m.notes ? m.notes : 'Žádné taktické pokyny neuvedeny.';
+
+            document.getElementById('editMatchBtn').onclick = function() {
+                editingMatchId = m.id;
+                document.getElementById('matchOpponent').value = m.opponent;
+                document.getElementById('matchDate').value = m.date || '';
+                document.getElementById('matchRoster').value = m.roster || '';
+                document.getElementById('matchNotes').value = m.notes || '';
+                document.getElementById('matchFormTitle').innerText = `Úprava zápasu: vs ${m.opponent}`;
+                document.getElementById('saveMatchBtnText').innerText = 'Aktualizovat Zápas';
+                document.getElementById('cancelMatchEditBtn').classList.remove('hidden');
+                closeMatchDetailModal();
+                showToast('Údaje zápasu byly načteny do formuláře');
+            };
+
+            document.getElementById('deleteMatchModalBtn').onclick = function() {
+                closeMatchDetailModal();
+                deleteSavedMatch(null, m.id);
+            };
+
+            document.getElementById('matchDetailModal').classList.remove('hidden');
+        }
+
+        function closeMatchDetailModal() {
+            document.getElementById('matchDetailModal').classList.add('hidden');
+        }
+
+        function deleteSavedMatch(e, matchId) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            showConfirm('Smazat zápas', 'Opravdu chcete smazat tento zápas?', () => {
+                let matches = JSON.parse(localStorage.getItem('ft_matches') || '[]').filter(m => m.id !== matchId);
+                localStorage.setItem('ft_matches', JSON.stringify(matches));
+                loadMatchesList();
+                showToast('Zápas byl smazán.');
+            });
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, match => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[match]));
+        }
+    </script>
+</body>
+</html>
